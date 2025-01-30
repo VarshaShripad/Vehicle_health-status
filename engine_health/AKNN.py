@@ -30,6 +30,9 @@ outliers_condition = ((X < (Q1 - 1.3 * IQR)) | (X > (Q3 + 1.3 * IQR)))
 X_no_outliers = X[~outliers_condition.any(axis=1)].copy()
 y_no_outliers = y[~outliers_condition.any(axis=1)]
 
+
+
+print(X_no_outliers.head())
 # Check the shape after removing outliers
 print("Original dataset shape:", X.shape)
 print("Dataset shape after removing outliers:", X_no_outliers.shape)
@@ -119,6 +122,7 @@ test_instance = np.append(test_instance, [
 
 # Convert the test instance to a DataFrame with the same columns as X_no_outliers
 test_instance_df = pd.DataFrame(test_instance.reshape(1, -1), columns=X_no_outliers.columns)
+print(X_no_outliers.columns)
 
 # Scale the test instance using the same scaler fitted on the training data
 test_instance_scaled = scaler.transform(test_instance_df)
