@@ -1,4 +1,3 @@
-# Import libraries
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -7,6 +6,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
 from imblearn.over_sampling import ADASYN
+import joblib  # For saving the model and preprocessing steps
 
 # Load the dataset
 # Replace 'engine_data.csv' with your file path
@@ -25,7 +25,9 @@ Q1 = X.quantile(0.25)
 Q3 = X.quantile(0.75)
 IQR = Q3 - Q1
 outliers_condition = ((X < (Q1 - 1.3 * IQR)) | (X > (Q3 + 1.3 * IQR)))
-X_no_outliers = X[~outliers_condition.any(axis=1)]
+
+# Create a copy of X to avoid modifying the original DataFrame
+X_no_outliers = X[~outliers_condition.any(axis=1)].copy()
 y_no_outliers = y[~outliers_condition.any(axis=1)]
 
 # Check the shape after removing outliers
@@ -33,14 +35,14 @@ print("Original dataset shape:", X.shape)
 print("Dataset shape after removing outliers:", X_no_outliers.shape)
 
 # Step 2: Feature Engineering
-X_no_outliers['LubOilPressure_LubOilTemp'] = X_no_outliers['Lub oil pressure'] * X_no_outliers['lub oil temp']
-X_no_outliers['CoolantPressure_CoolantTemp'] = X_no_outliers['Coolant pressure'] * X_no_outliers['Coolant temp']
-X_no_outliers['LubOilTemp_CoolantTemp'] = X_no_outliers['lub oil temp'] * X_no_outliers['Coolant temp']
-X_no_outliers['LubOilPressure_CoolantPressure'] = X_no_outliers['Lub oil pressure'] * X_no_outliers['Coolant pressure']
-X_no_outliers['EngineRPM_LubOilTemp'] = X_no_outliers['Engine rpm'] * X_no_outliers['lub oil temp']
-X_no_outliers['EngineRPM_CoolantTemp'] = X_no_outliers['Engine rpm'] * X_no_outliers['Coolant temp']
-X_no_outliers['EngineRPM_LubOilPressure'] = X_no_outliers['Engine rpm'] * X_no_outliers['Lub oil pressure']
-X_no_outliers['EngineRPM_CoolantPressure'] = X_no_outliers['Engine rpm'] * X_no_outliers['Coolant pressure']
+X_no_outliers.loc[:, 'LubOilPressure_LubOilTemp'] = X_no_outliers['Lub oil pressure'] * X_no_outliers['lub oil temp']
+X_no_outliers.loc[:, 'CoolantPressure_CoolantTemp'] = X_no_outliers['Coolant pressure'] * X_no_outliers['Coolant temp']
+X_no_outliers.loc[:, 'LubOilTemp_CoolantTemp'] = X_no_outliers['lub oil temp'] * X_no_outliers['Coolant temp']
+X_no_outliers.loc[:, 'LubOilPressure_CoolantPressure'] = X_no_outliers['Lub oil pressure'] * X_no_outliers['Coolant pressure']
+X_no_outliers.loc[:, 'EngineRPM_LubOilTemp'] = X_no_outliers['Engine rpm'] * X_no_outliers['lub oil temp']
+X_no_outliers.loc[:, 'EngineRPM_CoolantTemp'] = X_no_outliers['Engine rpm'] * X_no_outliers['Coolant temp']
+X_no_outliers.loc[:, 'EngineRPM_LubOilPressure'] = X_no_outliers['Engine rpm'] * X_no_outliers['Lub oil pressure']
+X_no_outliers.loc[:, 'EngineRPM_CoolantPressure'] = X_no_outliers['Engine rpm'] * X_no_outliers['Coolant pressure']
 
 # Train a Random Forest to get feature importances
 rf = RandomForestClassifier(random_state=42)
@@ -94,13 +96,16 @@ print("Cross-validation scores:", cv_scores)
 print("Mean CV Accuracy:", np.mean(cv_scores))
 
 # Step 6: Test Instance Prediction
-test_instance = np.array([[50, 85, 0.5, 120, 200, 80]])
-lub_oil_pressure = test_instance[0, 0]
-lub_oil_temp = test_instance[0, 1]
-coolant_pressure = test_instance[0, 2]
-coolant_temp = test_instance[0, 3]
-engine_rpm = test_instance[0, 4]
+test_instance = np.array([[700, 2.493591821, 11.79092738, 3.178980794, 84.14416293, 81.6321865]])
 
+# Extract values
+lub_oil_pressure = test_instance[0, 1]
+lub_oil_temp = test_instance[0, 4]
+coolant_pressure = test_instance[0, 3]
+coolant_temp = test_instance[0, 5]
+engine_rpm = test_instance[0, 0]
+
+# Add feature engineered columns to the test instance
 test_instance = np.append(test_instance, [
     lub_oil_pressure * lub_oil_temp,
     coolant_pressure * coolant_temp,
@@ -112,8 +117,20 @@ test_instance = np.append(test_instance, [
     engine_rpm * coolant_pressure
 ])
 
-test_instance = test_instance.reshape(1, -1)
-test_instance_scaled = scaler.transform(test_instance)
+# Convert the test instance to a DataFrame with the same columns as X_no_outliers
+test_instance_df = pd.DataFrame(test_instance.reshape(1, -1), columns=X_no_outliers.columns)
 
+# Scale the test instance using the same scaler fitted on the training data
+test_instance_scaled = scaler.transform(test_instance_df)
+
+# Make prediction
 predicted_condition = optimized_knn.predict(test_instance_scaled)
 print("Predicted Engine Condition:", predicted_condition[0])
+
+# Step 7: Save the Model and Other Objects
+# Save the trained KNN model, scaler, and feature importances to disk
+joblib.dump(optimized_knn, 'knn_model.pkl')  # Save the trained KNN model
+joblib.dump(scaler, 'scaler.pkl')  # Save the scaler
+joblib.dump(feature_importances, 'feature_importances.pkl')  # Save feature importances
+
+print("Model, Scaler, and Feature Importances have been saved.")
