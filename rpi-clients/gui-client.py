@@ -4,7 +4,7 @@ import asyncio
 import random
 from time import sleep
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import messagebox
 import threading
 
 # Global flag to control whether the system is running
@@ -19,7 +19,7 @@ def generate_engine_health_data():
     lub_oil_temp = random.uniform(70, 90)  # Random lubrication oil temperature
     coolant_temp = random.uniform(70, 90)  # Random coolant temperature
 
-    return [engine_rpm, lub_oil_pressure, fuel_pressure, coolant_pressure, lub_oil_temp, coolant_temp]
+    return engine_rpm, lub_oil_pressure, fuel_pressure, coolant_pressure, lub_oil_temp, coolant_temp
 
 # Function to generate synthetic data from the predictive maintenance dataset
 def generate_predictive_maintenance_data():
@@ -31,10 +31,10 @@ def generate_predictive_maintenance_data():
     energy = torque * rotational_speed
     tdiff = process_temp - air_temp
 
-    return [air_temp, process_temp, rotational_speed, torque, tool_wear, tdiff, energy]
+    return air_temp, process_temp, rotational_speed, torque, tool_wear, tdiff, energy
 
 # Function to create the test instance and send it over WebSocket
-async def send_data(websocket, test_instance, text_widget):
+async def send_data(websocket, test_instance, label_status, label_failure, label_condition):
     try:
         # Send the data as a JSON string to the WebSocket server
         await websocket.send(json.dumps(test_instance))
@@ -42,26 +42,30 @@ async def send_data(websocket, test_instance, text_widget):
         # Wait for and receive the response from the server
         response = await websocket.recv()
 
-        # Update the text widget with the server response
-        text_widget.insert(tk.END, f"Received response: {response}\n")
-        text_widget.yview(tk.END)  # Scroll to the bottom
+        # Update the label with the server response
+        response_data = json.loads(response)
+        predicted_failure = response_data.get("Predicted Failure Type", "N/A")
+        predicted_condition = response_data.get("Predicted Engine Condition", "N/A")
+
+        # Update the GUI with the results
+        label_status.config(text="Data sent successfully!")
+        label_failure.config(text=f"Predicted Failure: {predicted_failure}")
+        label_condition.config(text=f"Predicted Condition: {predicted_condition}")
 
     except Exception as e:
-        text_widget.insert(tk.END, f"An error occurred: {e}\n")
-        text_widget.yview(tk.END)  # Scroll to the bottom
+        label_status.config(text=f"Error: {e}")
 
 # Function to run WebSocket client in the event loop
-async def run_client(test_instance, text_widget):
+async def run_client(test_instance, label_status, label_failure, label_condition):
     uri = "ws://localhost:8765"  # WebSocket server address
     try:
         async with websockets.connect(uri) as websocket:
-            await send_data(websocket, test_instance, text_widget)
+            await send_data(websocket, test_instance, label_status, label_failure, label_condition)
     except Exception as e:
-        text_widget.insert(tk.END, f"Connection error: {e}\n")
-        text_widget.yview(tk.END)  # Scroll to the bottom
+        label_status.config(text=f"Connection error: {e}")
 
 # Function to handle continuous sending of data until stopped
-def run_continuous_data_sending(text_widget):
+def run_continuous_data_sending(label_status, label_failure, label_condition):
     global running
     while running:
         # Generate synthetic data for both models
@@ -75,41 +79,60 @@ def run_continuous_data_sending(text_widget):
         }
 
         # Call the asyncio event loop to send the data
-        asyncio.run(run_client(test_instance, text_widget))
+        asyncio.run(run_client(test_instance, label_status, label_failure, label_condition))
 
         # Wait for 1 second before generating new data
         sleep(1)
 
 # Function to start or stop the system based on the button's state
-def toggle_system_state(button, text_widget):
+def toggle_system_state(button, label_status, label_failure, label_condition):
     global running
 
     if running:
         running = False
         button.config(text="Start")  # Change button text to "Start"
-        text_widget.insert(tk.END, "System stopped.\n")
-        text_widget.yview(tk.END)  # Scroll to the bottom
+        label_status.config(text="System stopped.")
+        label_failure.config(text="Predicted Failure: N/A")
+        label_condition.config(text="Predicted Condition: N/A")
     else:
         running = True
         button.config(text="Stop")  # Change button text to "Stop"
-        text_widget.insert(tk.END, "System started...\n")
-        text_widget.yview(tk.END)  # Scroll to the bottom
-        
+        label_status.config(text="System started...\nGenerating data...")
+
         # Start the continuous data sending in a separate thread
-        threading.Thread(target=run_continuous_data_sending, args=(text_widget,), daemon=True).start()
+        threading.Thread(target=run_continuous_data_sending, args=(label_status, label_failure, label_condition), daemon=True).start()
 
 # Create the main tkinter window
 def create_window():
+    global running
+
+    # Initialize the Tkinter window
     root = tk.Tk()
-    root.title("WebSocket Client for Predictive Maintenance")
+    root.title("WebSocket Client Dashboard")
+
+    # Set window size and position
+    root.geometry("600x400")
+    root.config(bg="#f5f5f5")
+
+    # Create a frame to hold the content in the center
+    frame = tk.Frame(root, bg="#f5f5f5")
+    frame.pack(expand=True)
+
+    # Create a label to show system status
+    label_status = tk.Label(frame, text="System stopped.", font=("Helvetica", 16), fg="#333", bg="#f5f5f5", wraplength=500)
+    label_status.pack(pady=20)
+
+    # Create a label to show predicted failure type
+    label_failure = tk.Label(frame, text="Predicted Failure: N/A", font=("Helvetica", 14), fg="#FF6347", bg="#f5f5f5")
+    label_failure.pack(pady=10)
+
+    # Create a label to show predicted engine condition
+    label_condition = tk.Label(frame, text="Predicted Condition: N/A", font=("Helvetica", 14), fg="#4682B4", bg="#f5f5f5")
+    label_condition.pack(pady=10)
 
     # Create a button to start/stop the system
-    start_stop_button = tk.Button(root, text="Start", command=lambda: toggle_system_state(start_stop_button, text_widget))
-    start_stop_button.pack(pady=10)
-
-    # Create a scrolled text widget to display responses from the server
-    text_widget = scrolledtext.ScrolledText(root, width=80, height=20)
-    text_widget.pack(padx=10, pady=10)
+    start_stop_button = tk.Button(frame, text="Start", font=("Helvetica", 14), bg="#4CAF50", fg="white", command=lambda: toggle_system_state(start_stop_button, label_status, label_failure, label_condition), width=15, height=2)
+    start_stop_button.pack(pady=20)
 
     # Run the Tkinter event loop
     root.mainloop()
