@@ -33,7 +33,7 @@ def generate_predictive_maintenance_data():
 
 # Function to create the test instance and send it over WebSocket
 async def send_data():
-    uri = "ws://localhost:8765"  # WebSocket server address
+    uri = "ws://13.51.56.144:8765"  # WebSocket server address
     
     try:
         async with websockets.connect(uri) as websocket:
