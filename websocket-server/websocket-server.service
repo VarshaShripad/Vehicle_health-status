@@ -1,0 +1,14 @@
+[Unit]
+Description=WebSocket Server
+After=network.target
+
+[Service]
+ExecStart=/home/ubuntu/car-server/venv/bin/python3  /home/ubuntu/car-server/server.py
+WorkingDirectory=/home/ubuntu/car-server
+StandardOutput=append:/var/log/websocket-server.log
+StandardError=append:/var/log/websocket-server.log
+Restart=always
+User=ubuntu
+
+[Install]
+WantedBy=multi-user.target
