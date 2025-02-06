@@ -52,7 +52,7 @@ async def send_data(websocket, test_instance, text_widget):
 
 # Function to run WebSocket client in the event loop
 async def run_client(test_instance, text_widget):
-    uri = "ws://13.51.56.144:8765"  # WebSocket server address
+    uri = "ws://16.170.232.142:8765/vehicle"  # WebSocket server address
     try:
         async with websockets.connect(uri) as websocket:
             await send_data(websocket, test_instance, text_widget)

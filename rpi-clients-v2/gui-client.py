@@ -74,7 +74,7 @@ async def send_data(ws, vehicle_id, label_status, label_failure, label_condition
 
 # Function to run WebSocket client in the event loop
 async def run_client(vehicle_id, label_status, label_failure, label_condition):
-    uri = "ws://127.0.0.1:8765/vehicle"  # WebSocket server address
+    uri = "ws://16.170.232.142:8765/vehicle"  # WebSocket server address
     try:
         async with websockets.connect(uri) as websocket:
             await send_data(websocket, vehicle_id, label_status, label_failure, label_condition)

@@ -65,7 +65,7 @@ async def connect_to_server():
     # Ask the user for the vehicle ID
     vehicle_id = input("Please enter the vehicle ID: ")
 
-    uri = "ws://127.0.0.1:8765/vehicle"  # WebSocket server address
+    uri = "ws://16.170.232.142:8765/vehicle"  # WebSocket server address
 
     backoff_delay = 5  # Initial reconnection delay
 
