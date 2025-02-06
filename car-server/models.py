@@ -11,7 +11,7 @@ from imblearn.over_sampling import SMOTE  # For oversampling minority classes
 import joblib
 
 class PredictiveMaintenanceModel:
-    def __init__(self, model_file='/home/ubuntu/car-server/ensemble_model.pkl', scaler_file='/home/ubuntu/car-server/ensemble_scaler.pkl', pca_file='/home/ubuntu/car-server/pca.pkl', label_encoder_file='/home/ubuntu/car-server/label_encoder.pkl', smote_file='/home/ubuntu/car-server/smote.pkl'):
+    def __init__(self, model_file='ensemble_model.pkl', scaler_file='ensemble_scaler.pkl', pca_file='pca.pkl', label_encoder_file='label_encoder.pkl', smote_file='smote.pkl'):
         # Load saved models and preprocessing steps
         self.model = joblib.load(model_file)
         self.scaler = joblib.load(scaler_file)
@@ -34,7 +34,7 @@ class PredictiveMaintenanceModel:
 
 
 class EngineConditionPredictor:
-    def __init__(self, model_file='/home/ubuntu/car-server/knn_model.pkl', scaler_file='/home/ubuntu/car-server/aknn_scaler.pkl', feature_importances_file='/home/ubuntu/car-server/feature_importances.pkl'):
+    def __init__(self, model_file='knn_model.pkl', scaler_file='aknn_scaler.pkl', feature_importances_file='feature_importances.pkl'):
         """
         Initializes the model, scaler, and feature importances from disk.
         """
