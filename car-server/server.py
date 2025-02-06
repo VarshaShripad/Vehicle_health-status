@@ -1,65 +1,99 @@
-from models import PredictiveMaintenanceModel, EngineConditionPredictor
-import asyncio
-import websockets
 import json
 import numpy as np
+import logging
+import asyncio
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from models import PredictiveMaintenanceModel, EngineConditionPredictor
+import warnings
+warnings.filterwarnings("ignore")
 
-# Load models once when the server starts
+# Initialize models
 predictive_model = PredictiveMaintenanceModel()
 engine_condition_predictor = EngineConditionPredictor()
 
-# WebSocket server function
-async def handle_connection(websocket, path="/"):
-    # When a message is received
-    data = await websocket.recv()
-    print(f"Received data: {data}")
+# Maintain connected vehicles and monitoring clients
+connected_vehicles = {}
+monitoring_clients = set()
 
+# Create FastAPI instance
+app = FastAPI()
+
+# Configure logging for better debugging and error reporting
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Enable CORS for all origins (if needed for the client-side app)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Handle vehicle WebSocket connections
+@app.websocket("/vehicle")
+async def handle_vehicle(websocket: WebSocket):
+    await websocket.accept()
     try:
-        # Parse the received data as JSON
-        instance_data = json.loads(data)  # Deserialize JSON to a dictionary
+        async for message in websocket.iter_text():
+            instance_data = json.loads(message)
+            vehicle_id = instance_data.get("vehicle_id", str(websocket.client))
 
-        # Extract input data for the models
-        predictive_input = instance_data.get("predictive_model_input")
-        engine_condition_input = instance_data.get("engine_condition_input")
+            # Prepare input for models
+            predictive_input = np.array(instance_data["predictive_model_input"]).reshape(1, -1)
+            engine_condition_input = np.array(instance_data["engine_condition_input"]).reshape(1, -1)
 
-        # Ensure that both required inputs are available
-        if predictive_input is None or engine_condition_input is None:
-            raise ValueError("Missing required input data for one of the models")
+            # Predict failure type and engine condition
+            predicted_failure = predictive_model.predict_failure(predictive_input)
+            predicted_condition = engine_condition_predictor.predict_condition(engine_condition_input)
 
-        # Convert inputs to numpy arrays (as both models expect numpy arrays)
-        # Reshaping the input to 2D (single sample)
-        predictive_input = np.array(predictive_input).reshape(1, -1)  # Shape it into (1, n_features)
-        engine_condition_input = np.array(engine_condition_input).reshape(1, -1)  # Shape it into (1, n_features)
+            response = {
+                "vehicle_id": vehicle_id,
+                "Predicted Failure Type": str(predicted_failure),
+                "Predicted Engine Condition": str(predicted_condition),
+            }
 
-        # Process the data with the predictive maintenance model
-        predicted_failure = predictive_model.predict_failure(predictive_input)
-        print(f"Predicted Failure Type: {predicted_failure}")
+            # Store the vehicle data in the connected vehicles dictionary
+            connected_vehicles[vehicle_id] = response
 
-        # Process the data with the engine condition predictor model
-        predicted_condition = engine_condition_predictor.predict_condition(engine_condition_input)
-        print(f"Predicted Engine Condition: {predicted_condition}")
+            # Send the prediction response to the vehicle
+            await websocket.send_text(json.dumps(response))
 
-        # Convert predictions to Python native types (int, str, float, etc.)
-        predicted_failure = predicted_failure.item() if isinstance(predicted_failure, np.generic) else predicted_failure
-        predicted_condition = predicted_condition.item() if isinstance(predicted_condition, np.generic) else predicted_condition
+            # Broadcast the new prediction to monitoring clients
+            if monitoring_clients:
+                broadcast_message = json.dumps(response)
+                await asyncio.gather(*[client.send_text(broadcast_message) for client in monitoring_clients])
 
-        # Send back the predictions to the client
-        response = {
-            "Predicted Failure Type": predicted_failure,
-            "Predicted Engine Condition": predicted_condition
-        }
-        await websocket.send(json.dumps(response))  # Send the response as JSON
-
+    except WebSocketDisconnect:
+        logger.info(f"Vehicle client disconnected: {websocket.client}")
     except Exception as e:
-        error_message = {"error": str(e)}
-        await websocket.send(json.dumps(error_message))  # Send error message to client
+        logger.error(f"Error in vehicle handler: {e}")
 
-# Start the WebSocket server
-async def main():
-    server = await websockets.serve(handle_connection, "0.0.0.0", 8765)
-    print("WebSocket server started at ws://localhost:8765")
-    await server.wait_closed()
+# Handle monitoring client connections
+@app.websocket("/monitor")
+async def handle_monitor(websocket: WebSocket):
+    # Add monitoring client to the set
+    await websocket.accept()
+    monitoring_clients.add(websocket)
+    try:
+        # Send current vehicle data to the monitoring client
+        for vehicle_data in connected_vehicles.values():
+            await websocket.send_text(json.dumps(vehicle_data))
 
-# Run the WebSocket server
+        # Keep the connection open and listen for any messages (currently no actions needed for monitor)
+        await websocket.receive_text()
+
+    except WebSocketDisconnect:
+        logger.info(f"Monitoring client disconnected: {websocket.client}")
+    except Exception as e:
+        logger.error(f"Error in monitor handler: {e}")
+    finally:
+        # Remove the monitoring client from the set when disconnected
+        monitoring_clients.remove(websocket)
+
+# Start the FastAPI server using Uvicorn
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8765)
